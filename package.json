@@ -17,9 +17,10 @@
       "three.min.js"
     ],
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "requestedExecutionLevel": "asInvoker"
-    },
+  "target": [{ "target": "nsis", "arch": ["x64"] }],
+  "requestedExecutionLevel": "asInvoker",
+  "publish": null
+},
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
