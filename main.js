@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, desktopCapturer, ipcMain } = require('electron')
+const { app, BrowserWindow, session, desktopCapturer, powerSaveBlocker } = require('electron')
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -11,9 +11,14 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: `${__dirname}/preload.js`
+      preload: `${__dirname}/preload.js`,
+      backgroundThrottling: false  // ← バックグラウンドでも処理を止めない
     }
   })
+
+  // スリープ・スクリーンセーバーを防止
+  powerSaveBlocker.start('prevent-display-sleep')
+  powerSaveBlocker.start('prevent-app-suspension')
 
   // マイクのパーミッションを自動許可
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
@@ -21,10 +26,9 @@ function createWindow() {
     callback(allowed.includes(permission))
   })
 
-  // getDisplayMedia に desktopCapturer を使って画面音声を注入
+  // 画面音声キャプチャ対応
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     desktopCapturer.getSources({ types: ['screen'] }).then(sources => {
-      // 最初のスクリーンソースを返す（音声付き）
       callback({ video: sources[0], audio: 'loopback' })
     })
   })
