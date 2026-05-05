@@ -1,3 +1,4 @@
+
 {
   "name": "vj-studio",
   "version": "2.0.0",
@@ -14,11 +15,13 @@
     "files": [
       "index.html",
       "main.js",
+      "preload.js",
       "three.min.js"
     ],
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "publish": null
     },
     "nsis": {
       "oneClick": false,
