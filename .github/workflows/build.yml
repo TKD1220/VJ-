@@ -37,3 +37,4 @@ jobs:
           name: VJ-STUDIO-Windows
           path: dist/*.exe
           retention-days: 30
+
