@@ -11,25 +11,31 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      backgroundThrottling: false  // バックグラウンドでも止まらない
+      backgroundThrottling: false
     }
   })
 
-  // スリープ・停止を防止
   powerSaveBlocker.start('prevent-display-sleep')
   powerSaveBlocker.start('prevent-app-suspension')
 
-  // マイク許可
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    const allowed = ['media', 'microphone']
-    callback(allowed.includes(permission))
+    callback(true) // 全パーミッション強制許可
   })
 
-  // 画面音声キャプチャ（loopback）
+  // デバイスが使用中でも強制取得
+  session.defaultSession.setDevicePermissionHandler((details) => {
+    return true
+  })
+
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     desktopCapturer.getSources({ types: ['screen'] }).then(sources => {
       callback({ video: sources[0], audio: 'loopback' })
     })
+  })
+
+  // getUserMediaを強制的に通す
+  win.webContents.session.setPermissionCheckHandler((webContents, permission) => {
+    return true
   })
 
   win.loadFile('index.html')
