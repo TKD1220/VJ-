@@ -119,13 +119,13 @@ button.chaos{background:rgba(255,50,50,0.15);border-color:#f55;color:#f88;animat
     <button class="src-btn" id="btn-device-list">🔊 デバイス選択</button>
   </div>
   <div id="device-area" style="display:none;flex-direction:column;gap:8px;width:min(420px,88vw);background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:14px 16px;">
-    <div style="font-size:9px;letter-spacing:0.2em;color:rgba(255,255,255,0.35);">OUTPUT / INPUT DEVICE</div>
+    <div style="font-size:9px;letter-spacing:0.2em;color:rgba(255,255,255,0.35);">AUDIO DEVICE</div>
     <select id="device-select" style="width:100%;padding:8px 12px;background:rgba(20,20,40,0.9);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer;outline:none;"><option value="">読み込み中...</option></select>
-    <button class="src-btn" id="btn-device-start" style="margin-top:2px;">▶ このデバイスで開始</button>
+    <button class="src-btn" id="btn-device-start">▶ このデバイスで開始</button>
   </div>
   <button class="src-btn" id="btn-demo" style="border-color:rgba(255,255,0,0.4);background:linear-gradient(135deg,rgba(255,255,0,0.08),rgba(255,128,0,0.08))">▶ デモモード（音声なし）</button>
   <p id="src-hint">音源を選択するとスタートします</p>
-  <p id="src-hint2" style="font-size:10px;color:rgba(255,255,255,0.25);letter-spacing:0.1em;">画面内音声は「タブの音声を共有」→「音声を含める」にチェック必須 &nbsp;|&nbsp; F キーでフルスクリーン</p>
+  <p id="src-hint2" style="font-size:10px;color:rgba(255,255,255,0.25);letter-spacing:0.1em;">画面内音声は「タブの音声を共有」→「音声を含める」にチェック必須</p>
   <p id="kbd">← → / 1~9 シーン &nbsp;·&nbsp; SPACE TAP BPM &nbsp;·&nbsp; F フルスクリーン &nbsp;·&nbsp; H UI切替 &nbsp;·&nbsp; C カオスモード</p>
 </div>
 
@@ -1496,10 +1496,6 @@ document.addEventListener('fullscreenchange',()=>{
   btn.style.borderColor=document.fullscreenElement?'#ff0':'';
   btn.style.color=document.fullscreenElement?'#ff0':'';
 });
-document.addEventListener('webkitfullscreenchange',()=>{
-  const btn=document.getElementById('fs-btn');
-  btn.textContent=document.webkitFullscreenElement?'⛶ EXIT':'⛶ FULL';
-});
 document.getElementById('fs-btn').onclick=toggleFullscreen;
 
 // ── DEVICE SELECTION ──────────────────────────────────────────────────────────
@@ -1509,6 +1505,7 @@ async function loadAudioDevices(){
   area.style.display='flex';
   sel.innerHTML='<option value="">読み込み中...</option>';
   try{
+    // まず権限取得を試みる
     await navigator.mediaDevices.getUserMedia({audio:true,video:false})
       .then(s=>s.getTracks().forEach(t=>t.stop())).catch(()=>{});
     const devices=await navigator.mediaDevices.enumerateDevices();
@@ -1516,36 +1513,55 @@ async function loadAudioDevices(){
     const outputs=devices.filter(d=>d.kind==='audiooutput');
     sel.innerHTML='<option value="">デバイスを選択...</option>';
     if(inputs.length){
-      const og=document.createElement('optgroup');og.label='🎤 入力デバイス（マイク・ライン）';
+      const og=document.createElement('optgroup');og.label='🎤 入力デバイス';
       inputs.forEach(d=>{const o=document.createElement('option');o.value='in:'+d.deviceId;o.textContent=d.label||'マイク '+d.deviceId.slice(0,8);og.appendChild(o);});
       sel.appendChild(og);
     }
     if(outputs.length){
-      const og=document.createElement('optgroup');og.label='🔊 出力デバイス（スピーカー等）';
+      const og=document.createElement('optgroup');og.label='🔊 出力デバイス';
       outputs.forEach(d=>{const o=document.createElement('option');o.value='out:'+d.deviceId;o.textContent=d.label||'出力 '+d.deviceId.slice(0,8);og.appendChild(o);});
       sel.appendChild(og);
     }
-    if(!inputs.length&&!outputs.length)sel.innerHTML='<option>デバイスが見つかりません</option>';
   }catch(e){showError('デバイス取得エラー: '+e.message);}
 }
+
 async function startSelectedDevice(){
   const val=document.getElementById('device-select').value;
   if(!val){showError('デバイスを選択してください');return;}
-  try{
-    await initAudioContext();disconnectAll();
-    if(val.startsWith('in:')){
-      const stream=await navigator.mediaDevices.getUserMedia({audio:{deviceId:{exact:val.slice(3)},echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
-      await connectStream(stream);isRunning=true;setSrcLabel('DEVICE');document.getElementById('start-screen').style.display='none';
-    }else{
-      const stream=await navigator.mediaDevices.getDisplayMedia({video:{width:2,height:2,frameRate:1},audio:true});
-      stream.getVideoTracks().forEach(t=>t.stop());
-      if(stream.getAudioTracks().length===0){showError('音声が取得できません。「音声を含める」をチェックしてください');return;}
-      await connectStream(stream);
-      stream.getAudioTracks()[0].addEventListener('ended',()=>{isRunning=false;setSrcLabel('—');document.getElementById('start-screen').style.display='flex';});
-      isRunning=true;setSrcLabel('DEVICE OUT');document.getElementById('start-screen').style.display='none';
-    }
-  }catch(e){if(e.name==='NotAllowedError')showError('キャンセルされました');else showError('エラー: '+e.message);}
+  await initAudioContext();disconnectAll();
+
+  // 複数の制約を順番に試して最初に成功したものを使う
+  const deviceId=val.startsWith('in:')?val.slice(3):null;
+  const tryConstraints=[
+    {audio:{deviceId:{exact:deviceId},echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false},
+    {audio:{deviceId:{ideal:deviceId},echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false},
+    {audio:{deviceId:deviceId,echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false},
+    {audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false},
+    {audio:true,video:false},
+  ];
+
+  let stream=null;
+  let lastError='';
+  for(const c of tryConstraints){
+    try{stream=await navigator.mediaDevices.getUserMedia(c);break;}
+    catch(e){lastError=e.message;continue;}
+  }
+
+  if(!stream){
+    // 最終手段: getDisplayMedia経由でloopback
+    try{
+      const ds=await navigator.mediaDevices.getDisplayMedia({video:{width:2,height:2,frameRate:1},audio:true});
+      ds.getVideoTracks().forEach(t=>t.stop());
+      if(ds.getAudioTracks().length>0){stream=ds;}
+    }catch(e){lastError=e.message;}
+  }
+
+  if(!stream){showError('取得失敗: '+lastError);return;}
+  await connectStream(stream);
+  isRunning=true;setSrcLabel('DEVICE');
+  document.getElementById('start-screen').style.display='none';
 }
+
 document.getElementById('btn-device-list').onclick=loadAudioDevices;
 document.getElementById('btn-device-start').onclick=startSelectedDevice;
 
