@@ -116,10 +116,16 @@ button.chaos{background:rgba(255,50,50,0.15);border-color:#f55;color:#f88;animat
     <button class="src-btn" id="btn-mic">🎤 マイク入力</button>
     <button class="src-btn" id="btn-screen">🖥️ 画面内音声</button>
     <button class="src-btn" id="btn-both">🔀 両方ミックス</button>
+    <button class="src-btn" id="btn-device-list">🔊 デバイス選択</button>
+  </div>
+  <div id="device-area" style="display:none;flex-direction:column;gap:8px;width:min(420px,88vw);background:rgba(0,0,0,0.55);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:14px 16px;">
+    <div style="font-size:9px;letter-spacing:0.2em;color:rgba(255,255,255,0.35);">OUTPUT / INPUT DEVICE</div>
+    <select id="device-select" style="width:100%;padding:8px 12px;background:rgba(20,20,40,0.9);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:8px;font-family:inherit;font-size:12px;cursor:pointer;outline:none;"><option value="">読み込み中...</option></select>
+    <button class="src-btn" id="btn-device-start" style="margin-top:2px;">▶ このデバイスで開始</button>
   </div>
   <button class="src-btn" id="btn-demo" style="border-color:rgba(255,255,0,0.4);background:linear-gradient(135deg,rgba(255,255,0,0.08),rgba(255,128,0,0.08))">▶ デモモード（音声なし）</button>
   <p id="src-hint">音源を選択するとスタートします</p>
-  <p id="src-hint2" style="font-size:10px;color:rgba(255,255,255,0.25);letter-spacing:0.1em;">画面内音声は「タブの音声を共有」→「音声を含める」にチェック必須</p>
+  <p id="src-hint2" style="font-size:10px;color:rgba(255,255,255,0.25);letter-spacing:0.1em;">画面内音声は「タブの音声を共有」→「音声を含める」にチェック必須 &nbsp;|&nbsp; F キーでフルスクリーン</p>
   <p id="kbd">← → / 1~9 シーン &nbsp;·&nbsp; SPACE TAP BPM &nbsp;·&nbsp; F フルスクリーン &nbsp;·&nbsp; H UI切替 &nbsp;·&nbsp; C カオスモード</p>
 </div>
 
@@ -219,7 +225,7 @@ button.chaos{background:rgba(255,50,50,0.15);border-color:#f55;color:#f88;animat
   <button id="strobe-btn">STROBE</button>
   <div class="sep"></div>
   <button id="ui-btn">UI 非表示</button>
-  <button id="fs-btn">FULL</button>
+  <button id="fs-btn">⛶ FULL</button>
 </div>
 
 <script src="three.min.js"></script>
@@ -1475,7 +1481,73 @@ document.getElementById('ui-btn').onclick=()=>{
   const hidden=document.body.classList.toggle('ui-hidden');
   document.getElementById('ui-btn').textContent=hidden?'UI 表示':'UI 非表示';
 };
-document.getElementById('fs-btn').onclick=()=>{if(!document.fullscreenElement)document.documentElement.requestFullscreen();else document.exitFullscreen();};
+// ── FULLSCREEN ────────────────────────────────────────────────────────────────
+function toggleFullscreen(){
+  const el=document.documentElement;
+  if(!document.fullscreenElement&&!document.webkitFullscreenElement){
+    (el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen).call(el);
+  }else{
+    (document.exitFullscreen||document.webkitExitFullscreen||document.mozCancelFullScreen).call(document);
+  }
+}
+document.addEventListener('fullscreenchange',()=>{
+  const btn=document.getElementById('fs-btn');
+  btn.textContent=document.fullscreenElement?'⛶ EXIT':'⛶ FULL';
+  btn.style.borderColor=document.fullscreenElement?'#ff0':'';
+  btn.style.color=document.fullscreenElement?'#ff0':'';
+});
+document.addEventListener('webkitfullscreenchange',()=>{
+  const btn=document.getElementById('fs-btn');
+  btn.textContent=document.webkitFullscreenElement?'⛶ EXIT':'⛶ FULL';
+});
+document.getElementById('fs-btn').onclick=toggleFullscreen;
+
+// ── DEVICE SELECTION ──────────────────────────────────────────────────────────
+async function loadAudioDevices(){
+  const area=document.getElementById('device-area');
+  const sel=document.getElementById('device-select');
+  area.style.display='flex';
+  sel.innerHTML='<option value="">読み込み中...</option>';
+  try{
+    await navigator.mediaDevices.getUserMedia({audio:true,video:false})
+      .then(s=>s.getTracks().forEach(t=>t.stop())).catch(()=>{});
+    const devices=await navigator.mediaDevices.enumerateDevices();
+    const inputs=devices.filter(d=>d.kind==='audioinput');
+    const outputs=devices.filter(d=>d.kind==='audiooutput');
+    sel.innerHTML='<option value="">デバイスを選択...</option>';
+    if(inputs.length){
+      const og=document.createElement('optgroup');og.label='🎤 入力デバイス（マイク・ライン）';
+      inputs.forEach(d=>{const o=document.createElement('option');o.value='in:'+d.deviceId;o.textContent=d.label||'マイク '+d.deviceId.slice(0,8);og.appendChild(o);});
+      sel.appendChild(og);
+    }
+    if(outputs.length){
+      const og=document.createElement('optgroup');og.label='🔊 出力デバイス（スピーカー等）';
+      outputs.forEach(d=>{const o=document.createElement('option');o.value='out:'+d.deviceId;o.textContent=d.label||'出力 '+d.deviceId.slice(0,8);og.appendChild(o);});
+      sel.appendChild(og);
+    }
+    if(!inputs.length&&!outputs.length)sel.innerHTML='<option>デバイスが見つかりません</option>';
+  }catch(e){showError('デバイス取得エラー: '+e.message);}
+}
+async function startSelectedDevice(){
+  const val=document.getElementById('device-select').value;
+  if(!val){showError('デバイスを選択してください');return;}
+  try{
+    await initAudioContext();disconnectAll();
+    if(val.startsWith('in:')){
+      const stream=await navigator.mediaDevices.getUserMedia({audio:{deviceId:{exact:val.slice(3)},echoCancellation:false,noiseSuppression:false,autoGainControl:false},video:false});
+      await connectStream(stream);isRunning=true;setSrcLabel('DEVICE');document.getElementById('start-screen').style.display='none';
+    }else{
+      const stream=await navigator.mediaDevices.getDisplayMedia({video:{width:2,height:2,frameRate:1},audio:true});
+      stream.getVideoTracks().forEach(t=>t.stop());
+      if(stream.getAudioTracks().length===0){showError('音声が取得できません。「音声を含める」をチェックしてください');return;}
+      await connectStream(stream);
+      stream.getAudioTracks()[0].addEventListener('ended',()=>{isRunning=false;setSrcLabel('—');document.getElementById('start-screen').style.display='flex';});
+      isRunning=true;setSrcLabel('DEVICE OUT');document.getElementById('start-screen').style.display='none';
+    }
+  }catch(e){if(e.name==='NotAllowedError')showError('キャンセルされました');else showError('エラー: '+e.message);}
+}
+document.getElementById('btn-device-list').onclick=loadAudioDevices;
+document.getElementById('btn-device-start').onclick=startSelectedDevice;
 
 // rekordbox BPM input
 document.getElementById('rbx-bpm').addEventListener('input',function(){
@@ -1513,7 +1585,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='ArrowLeft')switchScene(cur-1);
   if(e.key===' '){e.preventDefault();document.getElementById('tap-btn').click();}
   if(e.key==='a'||e.key==='A')document.getElementById('auto-btn').click();
-  if(e.key==='f'||e.key==='F')document.getElementById('fs-btn').click();
+  if(e.key==='f'||e.key==='F')toggleFullscreen();
   if(e.key==='h'||e.key==='H')document.getElementById('ui-btn').click();
   if(e.key==='c'||e.key==='C')document.getElementById('chaos-btn').click();
   const n=parseInt(e.key);if(n>=1&&n<=9)switchScene(n-1);
@@ -1530,4 +1602,3 @@ animate();
 </script>
 </body>
 </html>
-
