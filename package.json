@@ -14,7 +14,7 @@
     "files": ["index.html", "main.js", "three.min.js"],
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
-      "requestedExecutionLevel": "asInvoker",
+      "requestedExecutionLevel": "requireAdministrator"
       "publish": null
     },
     "nsis": {
