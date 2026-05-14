@@ -1,9 +1,8 @@
-
 {
   "name": "vj-studio",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "productName": "VJ STUDIO",
-  "description": "VJ STUDIO — HYPER EDITION v2",
+  "description": "VJ STUDIO — HYPER EDITION v3",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -12,12 +11,7 @@
   "build": {
     "appId": "com.vjstudio.hyperapp",
     "productName": "VJ STUDIO",
-    "files": [
-      "index.html",
-      "main.js",
-      "preload.js",
-      "three.min.js"
-    ],
+    "files": ["index.html", "main.js", "three.min.js"],
     "win": {
       "target": [{ "target": "nsis", "arch": ["x64"] }],
       "requestedExecutionLevel": "asInvoker",
