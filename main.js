@@ -18,14 +18,16 @@ function createWindow() {
   powerSaveBlocker.start('prevent-display-sleep')
   powerSaveBlocker.start('prevent-app-suspension')
 
+  // 全パーミッション強制許可
   session.defaultSession.setPermissionRequestHandler((webContents, permission, callback) => {
-    callback(true) // 全パーミッション強制許可
+    callback(true)
   })
+  session.defaultSession.setPermissionCheckHandler(() => true)
+  session.defaultSession.setDevicePermissionHandler(() => true)
 
-  // デバイスが使用中でも強制取得
-  session.defaultSession.setDevicePermissionHandler((details) => {
-    return true
-  })
+  // Chromiumフラグで排他モードを無効化・WASAPI共有モード強制
+  app.commandLine.appendSwitch('disable-features', 'WinSpeaker')
+  app.commandLine.appendSwitch('audio-buffer-size', '2048')
 
   session.defaultSession.setDisplayMediaRequestHandler((request, callback) => {
     desktopCapturer.getSources({ types: ['screen'] }).then(sources => {
@@ -33,13 +35,13 @@ function createWindow() {
     })
   })
 
-  // getUserMediaを強制的に通す
-  win.webContents.session.setPermissionCheckHandler((webContents, permission) => {
-    return true
-  })
-
   win.loadFile('index.html')
 }
+
+// Chromiumフラグはapp.ready前に設定する必要あり
+app.commandLine.appendSwitch('shared-audio-device-factory')
+app.commandLine.appendSwitch('disable-exclusive-audio')
+app.commandLine.appendSwitch('enable-features', 'SharedArrayBuffer')
 
 app.whenReady().then(createWindow)
 app.on('window-all-closed', () => app.quit())
